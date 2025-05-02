@@ -1084,6 +1084,7 @@ int ff_isom_write_hvcc(AVIOContext *pb, const uint8_t *data,
         return AVERROR_INVALIDDATA;
     }
 
+    // 解析nalu单元
     ret = ff_avc_parse_nal_units_buf(data, &start, &size);
     if (ret < 0)
         return ret;
