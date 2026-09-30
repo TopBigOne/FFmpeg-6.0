@@ -211,7 +211,7 @@ External library support:
   --enable-gmp             enable gmp, needed for rtmp(t)e support
                            if openssl or librtmp is not used [no]
   --enable-gnutls          enable gnutls, needed for https support
-                           if openssl, libtls or mbedtls is not used [no]
+                           if wolfssl, openssl, libtls or mbedtls is not used [no]
   --disable-iconv          disable iconv [autodetect]
   --enable-jni             enable JNI support [no]
   --enable-ladspa          enable LADSPA audio filtering [no]
@@ -278,7 +278,7 @@ External library support:
   --enable-libtesseract    enable Tesseract, needed for ocr filter [no]
   --enable-libtheora       enable Theora encoding via libtheora [no]
   --enable-libtls          enable LibreSSL (via libtls), needed for https support
-                           if openssl, gnutls or mbedtls is not used [no]
+                           if wolfssl, openssl, gnutls or mbedtls is not used [no]
   --enable-libtwolame      enable MP2 encoding via libtwolame [no]
   --enable-libuavs3d       enable AVS3 decoding via libuavs3d [no]
   --enable-libv4l2         enable libv4l2/v4l-utils [no]
@@ -289,6 +289,8 @@ External library support:
                            native implementation exists [no]
   --enable-libvpx          enable VP8 and VP9 de/encoding via libvpx [no]
   --enable-libwebp         enable WebP encoding via libwebp [no]
+  --enable-wolfssl         enable WolfSSL), needed for https support
+                           if openssl, gnutls, libtls or mbedtls is not used [no]
   --enable-libx264         enable H.264 encoding via x264 [no]
   --enable-libx265         enable HEVC encoding via x265 [no]
   --enable-libxavs         enable AVS encoding via xavs [no]
@@ -308,7 +310,7 @@ External library support:
   --disable-lzma           disable lzma [autodetect]
   --enable-decklink        enable Blackmagic DeckLink I/O support [no]
   --enable-mbedtls         enable mbedTLS, needed for https support
-                           if openssl, gnutls or libtls is not used [no]
+                           if wolfssl, openssl, gnutls or libtls is not used [no]
   --enable-mediacodec      enable Android MediaCodec support [no]
   --enable-mediafoundation enable encoding via MediaFoundation [auto]
   --disable-metal          disable Apple Metal framework [autodetect]
@@ -317,7 +319,7 @@ External library support:
   --enable-opencl          enable OpenCL processing [no]
   --enable-opengl          enable OpenGL rendering [no]
   --enable-openssl         enable openssl, needed for https support
-                           if gnutls, libtls or mbedtls is not used [no]
+                           if wolfssl, gnutls, libtls or mbedtls is not used [no]
   --enable-pocketsphinx    enable PocketSphinx, needed for asr filter [no]
   --disable-sndio          disable sndio support [autodetect]
   --disable-schannel       disable SChannel SSP, needed for TLS support on
@@ -405,6 +407,7 @@ Toolchain options:
   --extra-ldflags=ELDFLAGS add ELDFLAGS to LDFLAGS [$LDFLAGS]
   --extra-ldexeflags=ELDFLAGS add ELDFLAGS to LDEXEFLAGS [$LDEXEFLAGS]
   --extra-ldsoflags=ELDFLAGS add ELDFLAGS to LDSOFLAGS [$LDSOFLAGS]
+  --extra-windresflags=EWFLAGS add EWFLAGS to WINDRESFLAGS [$WINDRESFLAGS]
   --extra-libs=ELIBS       add ELIBS [$ELIBS]
   --extra-version=STRING   version string suffix []
   --optflags=OPTFLAGS      override optimization-related compiler flags
@@ -424,6 +427,8 @@ Advanced options (experts only):
                            disable buffer boundary checking in bitreaders
                            (faster, but may crash)
   --sws-max-filter-size=N  the max filter size swscale uses [$sws_max_filter_size_default]
+  --h264-max-bit-depth=N   the max h264 decoding bit depth [$h264_max_bit_depth_default]
+  --h265-bit-depths=N1,N2  the h265 decoding bit depths [$h265_bit_depths_default]
 
 Optimization options (experts only):
   --disable-asm            disable all assembly optimizations
@@ -982,6 +987,10 @@ add_host_cflags(){
 
 add_host_ldflags(){
     append host_ldflags $($host_ldflags_filter "$@")
+}
+
+add_windresflags(){
+    append WINDRESFLAGS "$@"
 }
 
 add_compat(){
@@ -1873,6 +1882,7 @@ EXTERNAL_LIBRARY_LIST="
     openssl
     pocketsphinx
     vapoursynth
+    wolfssl
 "
 
 HWACCEL_AUTODETECT_LIBRARY_LIST="
@@ -2564,6 +2574,8 @@ CMDLINE_SET="
     env
     extra_version
     gas
+    h264_max_bit_depth
+    h265_bit_depths
     host_cc
     host_cflags
     host_extralibs
@@ -3210,6 +3222,7 @@ hevc_vaapi_encoder_select="atsc_a53 cbs_h265 vaapi_encode"
 hevc_v4l2m2m_decoder_deps="v4l2_m2m hevc_v4l2_m2m"
 hevc_v4l2m2m_decoder_select="hevc_mp4toannexb_bsf"
 hevc_v4l2m2m_encoder_deps="v4l2_m2m hevc_v4l2_m2m"
+mjpeg_mmal_decoder_deps="mmal"
 mjpeg_cuvid_decoder_deps="cuvid"
 mjpeg_qsv_decoder_select="qsvdec"
 mjpeg_qsv_encoder_deps="libmfx"
@@ -3240,6 +3253,7 @@ vc1_cuvid_decoder_deps="cuvid"
 vc1_mmal_decoder_deps="mmal"
 vc1_qsv_decoder_select="qsvdec"
 vc1_v4l2m2m_decoder_deps="v4l2_m2m vc1_v4l2_m2m"
+vp8_mmal_decoder_deps="mmal"
 vp8_cuvid_decoder_deps="cuvid"
 vp8_mediacodec_decoder_deps="mediacodec"
 vp8_qsv_decoder_select="qsvdec"
@@ -3258,6 +3272,7 @@ vp9_qsv_encoder_deps="libmfx MFX_CODEC_VP9"
 vp9_qsv_encoder_select="qsvenc"
 vp9_v4l2m2m_decoder_deps="v4l2_m2m vp9_v4l2_m2m"
 wmv3_crystalhd_decoder_select="crystalhd"
+wmv3_mmal_decoder_deps="mmal"
 av1_qsv_decoder_select="qsvdec"
 av1_qsv_encoder_select="qsvenc"
 av1_qsv_encoder_deps="libvpl"
@@ -3594,13 +3609,13 @@ rtmpte_protocol_suggest="zlib"
 rtmpts_protocol_select="ffrtmphttp_protocol https_protocol"
 rtmpts_protocol_suggest="zlib"
 rtp_protocol_select="udp_protocol"
-schannel_conflict="openssl gnutls libtls mbedtls"
+schannel_conflict="openssl gnutls libtls mbedtls wolfssl"
 sctp_protocol_deps="struct_sctp_event_subscribe struct_msghdr_msg_flags"
 sctp_protocol_select="network"
-securetransport_conflict="openssl gnutls libtls mbedtls"
+securetransport_conflict="openssl gnutls libtls mbedtls wolfssl"
 srtp_protocol_select="rtp_protocol srtp"
 tcp_protocol_select="network"
-tls_protocol_deps_any="gnutls openssl schannel securetransport libtls mbedtls"
+tls_protocol_deps_any="gnutls openssl schannel securetransport libtls mbedtls wolfssl"
 tls_protocol_select="tcp_protocol"
 udp_protocol_select="network"
 udplite_protocol_select="network"
@@ -3623,7 +3638,7 @@ libsmbclient_protocol_deps="libsmbclient gplv3"
 libsrt_protocol_deps="libsrt"
 libsrt_protocol_select="network"
 libssh_protocol_deps="libssh"
-libtls_conflict="openssl gnutls mbedtls"
+libtls_conflict="openssl gnutls mbedtls wolfssl"
 libzmq_protocol_deps="libzmq"
 libzmq_protocol_select="network"
 
@@ -3818,7 +3833,7 @@ avcodec_suggest="libm stdatomic"
 avdevice_deps="avformat avcodec avutil"
 avdevice_suggest="libm stdatomic"
 avfilter_deps="avutil"
-avfilter_suggest="libm stdatomic"
+avfilter_suggest="libm stdatomic spirv_compiler"
 avformat_deps="avcodec avutil"
 avformat_suggest="libm network zlib stdatomic"
 avutil_suggest="clock_gettime ffnvcodec libm libdrm libmfx opencl user32 vaapi vulkan videotoolbox corefoundation corevideo coremedia bcrypt stdatomic"
@@ -3923,6 +3938,12 @@ enable valgrind_backtrace
 
 sws_max_filter_size_default=256
 set_default sws_max_filter_size
+
+h264_max_bit_depth_default=10
+set_default h264_max_bit_depth
+
+h265_bit_depths_default=8,10,12
+set_default h265_bit_depths
 
 # internal components are enabled by default
 enable $EXTRALIBS_LIST
@@ -4144,6 +4165,9 @@ for opt do
         ;;
         --extra-libs=*)
             add_extralibs $optval
+        ;;
+        --extra-windresflags=*)
+            add_windresflags $optval
         ;;
         --disable-devices)
             disable $INDEV_LIST $OUTDEV_LIST
@@ -4610,9 +4634,11 @@ msvc_common_flags(){
             -lz)                  echo zlib.lib ;;
             -lx264)               echo libx264.lib ;;
             -lstdc++)             ;;
+            -libpath:*|-LIBPATH:*)echo $flag ;;
             -l*)                  echo ${flag#-l}.lib ;;
             -LARGEADDRESSAWARE)   echo $flag ;;
-            -L*)                  echo -libpath:${flag#-L} ;;
+            -L*)                  [ -n "$MSYSTEM" ] && (echo $flag |sed 's,-L\/\([a-zA-Z]\)\(\/.*\),-libpath:\1:\2,' -) || echo -libpath:${flag#-L} ;;
+            -I*)                  [ -n "$MSYSTEM" ] && (echo $flag |sed 's,-L\/\([a-zA-Z]\)\(\/.*\),-I\1:\2,' -) || echo $flag ;;
             -Wl,*)                ;;
             *)                    echo $flag ;;
         esac
@@ -4961,6 +4987,7 @@ add_cflags $extra_cflags
 add_cxxflags $extra_cxxflags
 add_objcflags $extra_objcflags
 add_asflags $extra_cflags
+add_windresflags $extra_windresflags
 
 if test -n "$sysroot"; then
     case "$cc_type" in
@@ -5554,7 +5581,6 @@ case $target_os in
         enabled x86_32 && append SHFLAGS -Wl,-read_only_relocs,suppress
         strip="${strip} -x"
         add_ldflags -Wl,-dynamic,-search_paths_first
-        check_cflags -Werror=partial-availability
         SLIBSUF=".dylib"
         SLIBNAME_WITH_VERSION='$(SLIBPREF)$(FULLNAME).$(LIBVERSION)$(SLIBSUF)'
         SLIBNAME_WITH_MAJOR='$(SLIBPREF)$(FULLNAME).$(LIBMAJOR)$(SLIBSUF)'
@@ -5592,7 +5618,7 @@ case $target_os in
             # Cannot build both shared and static libs when using dllimport.
             disable static
         fi
-        ! enabled small && test_cmd $windres --version && enable gnu_windres
+        test_cmd $windres --version && enable gnu_windres
         enabled x86_32 && check_ldflags -Wl,--large-address-aware
         shlibdir_default="$bindir_default"
         SLIBPREF=""
@@ -5640,9 +5666,13 @@ case $target_os in
             # for shared libs.
             LD_LIB='%.lib'
             # Cannot build both shared and static libs with MSVC or icl.
-            disable static
+            #disable static  # we can build shared and static libs. let user disable it explicitly
+            LIBPREF=lib #already defined. use lib as prefix to match windows system static lib name pattern(libcmt.lib, libucrt.lib etc.)
+        else
+            LIBPREF=    # if only build static libs, fftools exes always link to .lib without lib prefix
         fi
-        ! enabled small && test_cmd $windres --version && enable gnu_windres
+        LIBSUF=.lib
+        test_cmd $windres --version && enable gnu_windres
         enabled x86_32 && check_ldflags -LARGEADDRESSAWARE
         shlibdir_default="$bindir_default"
         SLIBPREF=""
@@ -5656,7 +5686,13 @@ case $target_os in
         SLIB_INSTALL_EXTRA_LIB='$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.def)'
         SHFLAGS='-dll -def:$$(@:$(SLIBSUF)=.def) -implib:$(SUBDIR)$(SLIBNAME:$(SLIBSUF)=.lib)'
         enabled x86_64 && objformat="win64" || objformat="win32"
-        ranlib=:
+        # ranlib is required by llvm toolchain, clang-cl is detected as msvc
+        [ "$toolchain" = msvc ] && {
+          ranlib=:
+        } || {
+          LD_LIB='%.lib'
+          SLIB_CREATE_DEF_CMD='EXTERN_PREFIX="$(EXTERN_PREFIX)" AR="$(AR_CMD)" NM="$(NM_CMD)" $(SRC_PATH)/compat/windows/makedef $(SUBDIR)lib$(NAME).ver $(OBJS) > $$(@:$(SLIBSUF)=.def)'
+        }
         enable dos_paths
         ;;
     cygwin*)
@@ -6443,7 +6479,7 @@ check_type "windows.h d3d11.h" "ID3D11VideoDecoder"
 check_type "windows.h d3d11.h" "ID3D11VideoContext"
 check_type "windows.h" "DPI_AWARENESS_CONTEXT" -D_WIN32_WINNT=0x0A00
 check_type "d3d9.h dxva2api.h" DXVA2_ConfigPictureDecode -D_WIN32_WINNT=0x0602
-check_func_headers mfapi.h MFCreateAlignedMemoryBuffer -lmfplat
+check_func_headers mfapi.h MFCreateAlignedMemoryBuffer -lMfplat
 
 check_type "vdpau/vdpau.h" "VdpPictureInfoHEVC"
 check_type "vdpau/vdpau.h" "VdpPictureInfoVP9"
@@ -6572,6 +6608,7 @@ enabled decklink          && { require_headers DeckLinkAPI.h &&
 enabled frei0r            && require_headers "frei0r.h"
 enabled gmp               && require gmp gmp.h mpz_export -lgmp
 enabled gnutls            && require_pkg_config gnutls gnutls gnutls/gnutls.h gnutls_global_init
+enabled wolfssl           && require_pkg_config wolfssl wolfssl wolfssl/ssl.h wolfSSL_library_init
 enabled jni               && { [ $target_os = "android" ] && check_headers jni.h && enabled pthreads || die "ERROR: jni not found"; }
 enabled ladspa            && require_headers "ladspa.h dlfcn.h"
 enabled lcms2             && require_pkg_config lcms2 "lcms2 >= 2.13" lcms2.h cmsCreateContext
@@ -6757,11 +6794,11 @@ enabled mbedtls           && { check_pkg_config mbedtls mbedtls mbedtls/x509_crt
                                check_lib mbedtls mbedtls/ssl.h mbedtls_ssl_init -lmbedtls -lmbedx509 -lmbedcrypto ||
                                die "ERROR: mbedTLS not found"; }
 enabled mediacodec        && { enabled jni || die "ERROR: mediacodec requires --enable-jni"; }
-enabled mmal              && { check_lib mmal interface/mmal/mmal.h mmal_port_connect -lmmal_core -lmmal_util -lmmal_vc_client -lbcm_host ||
+enabled mmal              && { check_lib mmal interface/mmal/mmal.h mmal_port_connect -lmmal_core -lmmal_util -lmmal_vc_client -lbcm_host -lvcos -lpthread ||
                                { ! enabled cross_compile &&
                                  add_cflags -isystem/opt/vc/include/ -isystem/opt/vc/include/interface/vmcs_host/linux -isystem/opt/vc/include/interface/vcos/pthreads -fgnu89-inline &&
                                  add_ldflags -L/opt/vc/lib/ &&
-                                 check_lib mmal interface/mmal/mmal.h mmal_port_connect -lmmal_core -lmmal_util -lmmal_vc_client -lbcm_host; } ||
+                                 check_lib mmal interface/mmal/mmal.h mmal_port_connect -lmmal_core -lmmal_util -lmmal_vc_client -lbcm_host -lvcos -lpthread; } ||
                                die "ERROR: mmal not found" &&
                                check_func_headers interface/mmal/mmal.h "MMAL_PARAMETER_VIDEO_MAX_NUM_CALLBACKS"; }
 enabled openal            && { check_pkg_config openal "openal >= 1.1" "AL/al.h" alGetError ||
@@ -6958,7 +6995,7 @@ test_cpp <<EOF && enable uwp && d3d11va_extralibs="-ldxgi -ld3d11"
 EOF
 
 # mediafoundation requires linking directly to mfplat if building for uwp target
-enabled uwp && mediafoundation_extralibs="-lmfplat -lmfuuid -lole32 -lstrmiids" || mediafoundation_extralibs="-lmfuuid -lole32 -lstrmiids"
+enabled uwp && mediafoundation_extralibs="-lMfplat -lmfuuid -lole32 -lstrmiids" || mediafoundation_extralibs="-lmfuuid -lole32 -lstrmiids"
 
 enabled libdrm &&
     check_pkg_config libdrm_getfb2 libdrm "xf86drmMode.h" drmModeGetFB2
@@ -7214,6 +7251,9 @@ test_cc -mno-red-zone <<EOF && noredzone_flags="-mno-red-zone"
 int x;
 EOF
 
+check_ldflags --icf=safe || check_ldflags -Wl,--icf=safe || { # ld or clang7 + lld
+    check_cflags -faddrsig && (check_ldflags --icf=all || check_ldflags -Wl,--icf=all)
+}
 
 if enabled icc; then
     # Just warnings, no remarks
@@ -7779,6 +7819,7 @@ DOXYGEN=$doxygen
 LDFLAGS=$LDFLAGS
 LDEXEFLAGS=$LDEXEFLAGS
 LDSOFLAGS=$LDSOFLAGS
+WINDRESFLAGS=$WINDRESFLAGS
 SHFLAGS=$(echo $($ldflags_filter $SHFLAGS))
 ASMSTRIPFLAGS=$ASMSTRIPFLAGS
 X86ASMFLAGS=$X86ASMFLAGS
@@ -7873,7 +7914,12 @@ cat > $TMPH <<EOF
 #define SLIBSUF "$SLIBSUF"
 #define HAVE_MMX2 HAVE_MMXEXT
 #define SWS_MAX_FILTER_SIZE $sws_max_filter_size
+#define H264_MAX_BIT_DEPTH $h264_max_bit_depth
 EOF
+
+for i in $(echo $h265_bit_depths |sed 's/\,/ /g'); do
+    echo "#define H265_BIT_DEPTH_${i} 1" >> $TMPH
+done
 
 test -n "$assert_level" &&
     echo "#define ASSERT_LEVEL $assert_level" >>$TMPH

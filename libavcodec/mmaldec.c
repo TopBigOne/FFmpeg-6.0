@@ -71,6 +71,7 @@ typedef struct MMALDecodeContext {
     AVClass *av_class;
     int extra_buffers;
     int extra_decoder_buffers;
+    int copy_frame;
 
     MMAL_COMPONENT_T *decoder;
     MMAL_QUEUE_T *queue_decoded_frames;
@@ -143,7 +144,6 @@ static int ffmmal_set_ref(AVFrame *frame, FFPoolRef *pool,
     atomic_fetch_add_explicit(&ref->pool->refcount, 1, memory_order_relaxed);
     mmal_buffer_header_acquire(buffer);
 
-    frame->format = AV_PIX_FMT_MMAL;
     frame->data[3] = (uint8_t *)ref->buffer;
     return 0;
 }
@@ -300,6 +300,8 @@ static int ffmal_update_format(AVCodecContext *avctx)
         goto fail;
 
     if (avctx->pix_fmt == AV_PIX_FMT_MMAL) {
+        if ((status = mmal_port_parameter_set_boolean(decoder->output[0], MMAL_PARAMETER_ZERO_COPY, 1)))
+            goto fail;
         format_out->encoding = MMAL_ENCODING_OPAQUE;
     } else {
         format_out->encoding_variant = format_out->encoding = MMAL_ENCODING_I420;
@@ -337,7 +339,8 @@ static int ffmal_update_format(AVCodecContext *avctx)
         FFMAX(decoder->output[0]->buffer_size_min, decoder->output[0]->buffer_size_recommended);
     decoder->output[0]->buffer_num =
         FFMAX(decoder->output[0]->buffer_num_min, decoder->output[0]->buffer_num_recommended) + ctx->extra_buffers;
-    ctx->pool_out->pool = mmal_pool_create(decoder->output[0]->buffer_num,
+    ctx->pool_out->pool = mmal_port_pool_create(decoder->output[0],
+                                           decoder->output[0]->buffer_num,
                                            decoder->output[0]->buffer_size);
     if (!ctx->pool_out->pool) {
         ret = AVERROR(ENOMEM);
@@ -380,14 +383,23 @@ static av_cold int ffmmal_init_decoder(AVCodecContext *avctx)
     format_in = decoder->input[0]->format;
     format_in->type = MMAL_ES_TYPE_VIDEO;
     switch (avctx->codec_id) {
+    case AV_CODEC_ID_MJPEG:
+        format_in->encoding = MMAL_ENCODING_MJPEG;
+        break;
     case AV_CODEC_ID_MPEG2VIDEO:
         format_in->encoding = MMAL_ENCODING_MP2V;
         break;
     case AV_CODEC_ID_MPEG4:
         format_in->encoding = MMAL_ENCODING_MP4V;
         break;
+    case AV_CODEC_ID_VP8:
+        format_in->encoding = MMAL_ENCODING_VP8;
+        break;
     case AV_CODEC_ID_VC1:
         format_in->encoding = MMAL_ENCODING_WVC1;
+        break;
+    case AV_CODEC_ID_WMV3: // may be not enabled
+        format_in->encoding = MMAL_ENCODING_WMV3;
         break;
     case AV_CODEC_ID_H264:
     default:
@@ -634,20 +646,34 @@ static int ffmal_copy_frame(AVCodecContext *avctx,  AVFrame *frame,
 
         if ((ret = ffmmal_set_ref(frame, ctx->pool_out, buffer)) < 0)
             goto done;
+        frame->format = AV_PIX_FMT_MMAL;
     } else {
         int w = FFALIGN(avctx->width, 32);
         int h = FFALIGN(avctx->height, 16);
         uint8_t *src[4];
         int linesize[4];
 
-        if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
-            goto done;
+        if (ctx->copy_frame) {
+            if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
+                goto done;
 
         av_image_fill_arrays(src, linesize,
                              buffer->data + buffer->type->video.offset[0],
                              avctx->pix_fmt, w, h, 1);
         av_image_copy(frame->data, frame->linesize, (const uint8_t **)src, linesize,
                       avctx->pix_fmt, avctx->width, avctx->height);
+        } else {
+            if ((ret = ff_decode_frame_props(avctx, frame)) < 0)
+                goto done;
+            /* buffer->type->video.offset/pitch[i]; is always 0 */
+            av_image_fill_arrays(src, linesize,
+                                buffer->data + buffer->type->video.offset[0],
+                                avctx->pix_fmt, w, h, 1);
+            if ((ret = ffmmal_set_ref(frame, ctx->pool_out, buffer)) < 0)
+                goto done;
+            memcpy(frame->data, src, sizeof(src));
+            memcpy(frame->linesize, linesize, sizeof(linesize));
+        }
     }
 
     frame->sample_aspect_ratio = avctx->sample_aspect_ratio;
@@ -815,9 +841,24 @@ static const AVCodecHWConfigInternal *const mmal_hw_configs[] = {
     NULL
 };
 
+AVHWAccel ff_vp8_mmal_hwaccel = {
+    .name       = "vp8_mmal",
+    .type       = AVMEDIA_TYPE_VIDEO,
+    .id         = AV_CODEC_ID_VP8,
+    .pix_fmt    = AV_PIX_FMT_MMAL,
+};
+
+AVHWAccel ff_wmv3_mmal_hwaccel = {
+    .name       = "wmv3_mmal",
+    .type       = AVMEDIA_TYPE_VIDEO,
+    .id         = AV_CODEC_ID_WMV3,
+    .pix_fmt    = AV_PIX_FMT_MMAL,
+};
+
 static const AVOption options[]={
     {"extra_buffers", "extra buffers", offsetof(MMALDecodeContext, extra_buffers), AV_OPT_TYPE_INT, {.i64 = 10}, 0, 256, 0},
     {"extra_decoder_buffers", "extra MMAL internal buffered frames", offsetof(MMALDecodeContext, extra_decoder_buffers), AV_OPT_TYPE_INT, {.i64 = 10}, 0, 256, 0},
+    {"copy_frame", "copy deocded data to avframe", offsetof(MMALDecodeContext, copy_frame), AV_OPT_TYPE_BOOL, {.i64 = 1}, 0, 256, 0},
     {NULL}
 };
 
@@ -851,6 +892,9 @@ static const AVClass ffmmal_dec_class = {
     };
 
 FFMMAL_DEC(h264, AV_CODEC_ID_H264)
+FFMMAL_DEC(mjpeg, AV_CODEC_ID_MJPEG)
 FFMMAL_DEC(mpeg2, AV_CODEC_ID_MPEG2VIDEO)
 FFMMAL_DEC(mpeg4, AV_CODEC_ID_MPEG4)
 FFMMAL_DEC(vc1, AV_CODEC_ID_VC1)
+FFMMAL_DEC(vp8, AV_CODEC_ID_VP8)
+FFMMAL_DEC(wmv3, AV_CODEC_ID_WMV3)
